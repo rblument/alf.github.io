@@ -1,50 +1,137 @@
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <title>References</title>
-    <link href="references.css" type="text/css" rel="stylesheet"/>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D3 Force Simulation</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        /* Basic styling for visibility */
+        svg {
+            border: 1px solid #ccc; /* Helps visualize the SVG boundary */
+            background-color: #f9f9f9;
+        }
+        .node {
+            fill: steelblue; /* Nodes will be blue */
+            stroke: #fff;
+            stroke-width: 1.5px;
+            cursor: grab; /* Indicates draggable */
+        }
+        .node:active {
+            cursor: grabbing;
+        }
+        .link {
+            stroke: #999; /* Links will be grey */
+            stroke-opacity: 0.6;
+            stroke-width: 2px;
+        }
+    </style>
 </head>
-  <div id="container"></div>
-<script src="d3.v7.js"></script>
-<script type="module">
+<body>
 
-// Declare the chart dimensions and margins.
-const width = 640;
-const height = 400;
-const marginTop = 20;
-const marginRight = 20;
-const marginBottom = 30;
-const marginLeft = 40;
+    <svg width="600" height="400"></svg>
 
-// Declare the x (horizontal position) scale.
-const x = d3.scaleUtc()
-    .domain([new Date("2023-01-01"), new Date("2024-01-01")])
-    .range([marginLeft, width - marginRight]);
+    <script>
+        const nodes = [
+            {id: 1, x: 100, y: 100},
+            {id: 2, x: 200, y: 200},
+            {id: 3, x: 300, y: 150}
+        ];
+        const links = [
+            {source: 1, target: 2},
+            {source: 2, target: 3}
+        ];
 
-// Declare the y (vertical position) scale.
-const y = d3.scaleLinear()
-    .domain([0, 100])
-    .range([height - marginBottom, marginTop]);
+        // --- Crucial Fix: Map link source/target IDs to node objects ---
+        // D3's forceLink needs actual node objects, not just their IDs,
+        // for its internal calculations unless you specify an .id() accessor.
+        // It's generally safest to resolve them upfront or use .id() correctly.
+        const nodeById = new Map(nodes.map(node => [node.id, node]));
 
-// Create the SVG container.
-const svg = d3.create("svg")
-    .attr("width", width)
-    .attr("height", height);
+        const resolvedLinks = links.map(link => ({
+            source: nodeById.get(link.source),
+            target: nodeById.get(link.target)
+        }));
 
-// Add the x-axis.
-svg.append("g")
-    .attr("transform", `translate(0,${height - marginBottom})`)
-    .call(d3.axisBottom(x));
+        // Select the SVG element
+        const svg = d3.select("svg");
+        const width = +svg.attr("width");
+        const height = +svg.attr("height");
 
-// Add the y-axis.
-svg.append("g")
-    .attr("transform", `translate(${marginLeft},0)`)
-    .call(d3.axisLeft(y));
+        // Create the Simulation
+        const simulation = d3.forceSimulation(nodes)
+            .force("charge", d3.forceManyBody().strength(-200)) // Increased repulsion for better spread
+            .force("link", d3.forceLink(resolvedLinks).id(d => d.id).distance(80).strength(0.7)) // Slightly adjusted for better layout
+            .force("center", d3.forceCenter(width / 2, height / 2)); // Center the graph based on SVG dimensions
 
-// Append the SVG element.
-container.append(svg.node());
+        // Add links to the SVG (draw them before nodes so nodes appear on top)
+        const linkElements = svg.selectAll("path.link")
+            .data(resolvedLinks) // Use resolvedLinks here
+            .enter().append("path")
+            .attr("class", "link"); // Class for CSS styling
 
-</script>
-  <body>
-<h1>ALF Test</h1>
-  </body>
+        // Add nodes to the SVG
+        const nodeElements = svg.selectAll("circle.node")
+            .data(nodes)
+            .enter().append("circle")
+            .attr("class", "node") // Class for CSS styling
+            .attr("r", 10) // Radius of nodes
+            .call(d3.drag() // Make nodes draggable
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended));
+
+        // Add text labels to nodes (optional, but good for identifying them)
+        const nodeLabels = svg.selectAll("text.node-label")
+            .data(nodes)
+            .enter().append("text")
+            .attr("class", "node-label")
+            .attr("dx", 12) // Offset from circle
+            .attr("dy", ".35em") // Vertical alignment
+            .text(d => d.id)
+            .style("font-size", "10px")
+            .style("fill", "#333");
+
+
+        // Update the simulation on each "tick"
+        function ticked() {
+            // Update node positions
+            nodeElements
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y);
+
+            // Update node label positions
+            nodeLabels
+                .attr("x", d => d.x)
+                .attr("y", d => d.y);
+
+
+            // Update link positions
+            linkElements
+                .attr("d", d => `M${d.source.x},${d.source.y}L${d.target.x},${d.target.y}`);
+        }
+
+        // Drag functions for node interaction
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x; // Fix the node's x position
+            d.fy = d.y; // Fix the node's y position
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x; // Update fixed x position during drag
+            d.fy = event.y; // Update fixed y position during drag
+        }
+
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null; // Unfix x position after drag ends
+            d.fy = null; // Unfix y position after drag ends
+        }
+
+        // Run the simulation
+        simulation.on("tick", ticked);
+    </script>
+
+</body>
 </html>
